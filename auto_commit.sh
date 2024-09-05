@@ -1,45 +1,56 @@
 #!/bin/bash
 
-# Get the git diff stat (summary of changes)
-git_diff=$(git diff --cached --stat)
+# Get the list of all changes: modified, untracked, and deleted files
+files=$(git ls-files --modified --others --deleted --exclude-standard)
 
-# Exit if there's no staged change
-if [ -z "$git_diff" ]; then
-    echo "No staged changes found."
+# Exit if no files are found
+if [ -z "$files" ]; then
+    echo "No changes to commit."
     exit 1
 fi
 
-# Analyze the types of changes from the diff and assign commit type and message
-if echo "$git_diff" | grep -q '\.dart'; then
-    if echo "$git_diff" | grep -q 'new file'; then
-        commit_type="feat"
-        description="add new Dart feature"
-    elif echo "$git_diff" | grep -q 'deleted'; then
+# Loop through each file and determine the type of change
+for file in $files
+do
+    # Get only the file name
+    filename=$(basename "$file")
+
+    if git ls-files --deleted | grep -q "$file"; then
         commit_type="refactor"
-        description="remove unused Dart files"
+        description="remove file"
+    elif git ls-files --others --exclude-standard | grep -q "$file"; then
+        commit_type="feat"
+        description="add new file"
     else
-        commit_type="fix"
-        description="update Dart logic"
+        # File has been modified, check if it's a specific type
+        if [[ $file == *.dart ]]; then
+            commit_type="fix"
+            description="update Dart logic"
+        elif [[ $file == *.md ]]; then
+            commit_type="docs"
+            description="update documentation"
+        elif [[ $file == *.png || $file == *.jpg || $file == *.jpeg || $file == *.svg || $file == *.gif ]]; then
+            commit_type="style"
+            description="update design assets"
+        elif [[ $file == *.yaml ]]; then
+            commit_type="chore"
+            description="update configuration"
+        else
+            commit_type="chore"
+            description="miscellaneous updates"
+        fi
     fi
-elif echo "$git_diff" | grep -q '\.md'; then
-    commit_type="docs"
-    description="update documentation"
-elif echo "$git_diff" | grep -q '\.(png|jpg|jpeg|svg|gif)'; then
-    commit_type="style"
-    description="update design assets"
-elif echo "$git_diff" | grep -q '\.yaml'; then
-    commit_type="chore"
-    description="update dependencies or configurations"
-else
-    commit_type="chore"
-    description="miscellaneous updates"
-fi
 
-# Generate the commit message
-commit_message="$commit_type: $description"
+    # Generate the commit message using only the file name
+    commit_message="$commit_type: $description for $filename"
 
-# Add all changes and commit
-git add .
-git commit -m "$commit_message"
-
-echo "Committed with message: $commit_message"
+    # Stage the current file and commit (ensure we handle deleted files)
+    if [[ "$description" == "remove file" ]]; then
+        git rm "$file"
+    else
+        git add "$file"
+    fi
+    
+    git commit -m "$commit_message"
+    echo "Committed $filename with message: $commit_message"
+done
